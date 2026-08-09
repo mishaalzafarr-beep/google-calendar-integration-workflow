@@ -1,0 +1,524 @@
+{
+  "name": "Google Calendar Integration Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "create-calendar-event",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1760,
+        1168
+      ],
+      "id": "ea148027-2fd9-4895-8ea1-816cebec1c53",
+      "name": "Receive Calendar Request",
+      "webhookId": "96a63a0b-3617-496d-9e07-464e0ac0a0c8"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a45abcae-b5b7-4f9e-9093-c065b1c8ea12",
+              "name": "request_received",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "620f099d-3cbc-4151-8d21-b4a4da1f6c99",
+              "name": "received_at",
+              "value": "={{$now}}",
+              "type": "string"
+            },
+            {
+              "id": "5f8cdeff-88d0-4f66-ae75-ea02e4961282",
+              "name": "request_id",
+              "value": "={{$execution.id}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -1504,
+        1168
+      ],
+      "id": "7119f2c1-c5ac-4c15-b24e-b8a93bdaca3d",
+      "name": "Log Incoming Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\n\nconst errors = [];\n\n// Required fields\nif (!body.summary) {\n  errors.push(\"summary is required\");\n}\n\nif (!body.description) {\n  errors.push(\"description is required\");\n}\n\nif (!body.start) {\n  errors.push(\"start is required\");\n}\n\nif (!body.end) {\n  errors.push(\"end is required\");\n}\nif (!body.location) {\n   errors.push(\"location is required\");\n}\n\n// Summary length\nif (body.summary && body.summary.trim().length < 3) {\n  errors.push(\"summary must contain at least 3 characters\");\n}\n\n// Date validation\nconst startDate = Date.parse(body.start);\nconst endDate = Date.parse(body.end);\n\nif (body.start && isNaN(startDate)) {\n  errors.push(\"Invalid start date\");\n}\n\nif (body.end && isNaN(endDate)) {\n  errors.push(\"Invalid end date\");\n}\n\nif (!isNaN(startDate) && !isNaN(endDate) && startDate >= endDate) {\n  errors.push(\"End time must be after start time\");\n}\n\nreturn [\n  {\n    json: {\n      ...$json,\n      valid: errors.length === 0,\n      statusCode: errors.length ? 400 : 200,\n      message: errors.length\n        ? \"Validation failed\"\n        : \"Validation successful\",\n      validationErrors: errors\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        1168
+      ],
+      "id": "2f5c45ed-9691-4f21-848e-a1da6dbd7cdf",
+      "name": "Validate Payload"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "45cf5e78-8710-4dfb-8ab7-ac3716e8a95c",
+              "leftValue": "={{$json.valid}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1104,
+        1168
+      ],
+      "id": "12fe8560-43aa-41bc-9baf-8895fddabf44",
+      "name": "Validation Passed?"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "mishaalzafar.octacer@gmail.com",
+          "mode": "list",
+          "cachedResultName": "mishaalzafar.octacer@gmail.com"
+        },
+        "start": "={{ $json.body.start }}",
+        "end": "={{ $json.body.end }}",
+        "additionalFields": {
+          "description": "={{$json.body.description}}",
+          "location": "={{$json.body.location}}",
+          "summary": "={{$json.body.summary}}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        -880,
+        1072
+      ],
+      "id": "63c8befb-737d-4296-9c8b-a66b925c26b8",
+      "name": "Create an event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "3wF2GgAaXCus7PCB",
+          "name": "Google Calendar account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ef4fb8a9-4fc6-49a8-9bbf-90d3cf11e7a9",
+              "leftValue": "={{\n  JSON.stringify($json).toLowerCase().includes('needs to be reconnected') ||\n  JSON.stringify($json).toLowerCase().includes('reconnect') ||\n  JSON.stringify($json).toLowerCase().includes('unauthorized') ||\n  JSON.stringify($json).toLowerCase().includes('invalid credentials') ||\n  JSON.stringify($json).toLowerCase().includes('401') ||\n  JSON.stringify($json).toLowerCase().includes('revoked')\n}}",
+              "rightValue": 401,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": "={{ false }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -592,
+        1168
+      ],
+      "id": "00d127a0-3157-4a4c-9d02-5704b08ae467",
+      "name": "Authentication Failed?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "db5b0012-93c3-4a36-9202-caf9eeab16e6",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "033b6aec-6863-4b2b-b9de-35bcc7efbc4a",
+              "name": "status",
+              "value": "={{ Number($json.statusCode) || 200 }}",
+              "type": "number"
+            },
+            {
+              "id": "ab347da1-7c6b-4d98-b9d7-7ff8aed6fcd0",
+              "name": "message",
+              "value": "Calendar event created successfully.",
+              "type": "string"
+            },
+            {
+              "id": "a7108476-9d5a-498b-9ece-b176eb8d2c04",
+              "name": "event_id",
+              "value": "={{$json.id}}",
+              "type": "string"
+            },
+            {
+              "id": "3d8bb98b-3be7-4689-aee5-ae8a4558dc88",
+              "name": "summary",
+              "value": "={{$json.summary}}",
+              "type": "string"
+            },
+            {
+              "id": "39327509-924a-44c7-90f7-d048f672f7e6",
+              "name": "status_text",
+              "value": "={{$json.status}}",
+              "type": "string"
+            },
+            {
+              "id": "b4b06cec-d06f-4bc9-8a2a-128191212126",
+              "name": "event_link",
+              "value": "={{$json.htmlLink}}",
+              "type": "string"
+            },
+            {
+              "id": "b719413a-9b43-45f7-a1aa-f176fc0c1cb5",
+              "name": "created_at",
+              "value": "={{$json.created}}",
+              "type": "string"
+            },
+            {
+              "id": "4944fbc3-9dfc-4709-95a3-c6b55d4f0b4e",
+              "name": "timestamp",
+              "value": "={{$now}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -96,
+        976
+      ],
+      "id": "73391d39-35ab-4f5d-a27c-4d4de5853ce9",
+      "name": "Build Success Response"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"success\": false,\n  \"status\": 401,\n  \"error\": \"GOOGLE_AUTHENTICATION_ERROR\",\n  \"message\": \"Google Calendar authentication failed. Please reconnect the Google Calendar credential.\",\n  \"action\": \"Reconnect the Google Calendar credential in n8n.\",\n  \"request_id\": \"{{$execution.id}}\",\n  \"timestamp\": \"{{$now}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -112,
+        1168
+      ],
+      "id": "ce8671a5-63f4-4037-9253-8b8a3ba75a0d",
+      "name": "Set Authentication Error"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"success\": false,\n  \"status\": 500,\n  \"error\": \"GOOGLE_API_ERROR\",\n  \"message\": \"{{$json.error?.message || 'Unexpected Google Calendar API error.'}}\",\n  \"details\": \"{{$json.error?.httpCode || $json.error?.code || 'Google Calendar API request failed.'}}\",\n  \"request_id\": {{$execution.id}},\n  \"timestamp\": \"{{$now}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -96,
+        1344
+      ],
+      "id": "8e1cf683-e022-400f-9c18-acfa891a32b6",
+      "name": "Set API Error"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "db5b0012-93c3-4a36-9202-caf9eeab16e6",
+              "name": "success",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "033b6aec-6863-4b2b-b9de-35bcc7efbc4a",
+              "name": "status",
+              "value": 400,
+              "type": "number"
+            },
+            {
+              "id": "b41e2d98-5e4d-4184-838a-980723f59a8b",
+              "name": "request_id",
+              "value": "={{$json.request_id}}",
+              "type": "string"
+            },
+            {
+              "id": "ab347da1-7c6b-4d98-b9d7-7ff8aed6fcd0",
+              "name": "message",
+              "value": "={{$json.message}}",
+              "type": "string"
+            },
+            {
+              "id": "9ca755e0-dfb3-4e04-b721-cfc9e1565add",
+              "name": "validation_errors",
+              "value": "={{$json.validationErrors}}",
+              "type": "array"
+            },
+            {
+              "id": "537bfb15-509c-4f90-97d0-0e99643b82af",
+              "name": "timestamp",
+              "value": "={{$now}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -96,
+        1504
+      ],
+      "id": "33780ac7-4656-4217-8594-edbd3868dc66",
+      "name": "Set Validation Error"
+    },
+    {
+      "parameters": {
+        "sendTo": "mishaalzafar.octacer@gmail.com",
+        "subject": "Google Calendar OAuth Authentication Failed",
+        "emailType": "text",
+        "message": "=Google Calendar OAuth authentication failed.\n\nThe stored Google OAuth credential is no longer valid.\n\nRequest ID:\n{{$json.request_id}}\n\nStatus:\n{{$json.status}}\n\nTime:\n{{$json.timestamp}}\n\nAction Required:\nReconnect the Google Calendar OAuth credential in n8n.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        80,
+        1168
+      ],
+      "id": "f84e3e50-6c19-469f-b255-34dfb646225b",
+      "name": "Send Email Notification",
+      "webhookId": "091132b5-c2ea-411e-89f6-9bad836b8c8d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KG4WvgNawFWFpmuj",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": "={{ Number($json.status) }}"
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        544,
+        1136
+      ],
+      "id": "d96519ee-2b7d-4f20-a4fb-0208f13178e7",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Calendar Request": {
+      "main": [
+        [
+          {
+            "node": "Log Incoming Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Incoming Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Payload": {
+      "main": [
+        [
+          {
+            "node": "Validation Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Passed?": {
+      "main": [
+        [
+          {
+            "node": "Create an event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create an event": {
+      "main": [
+        [
+          {
+            "node": "Build Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Authentication Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authentication Failed?": {
+      "main": [
+        [
+          {
+            "node": "Set Authentication Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set API Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Authentication Error": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set API Error": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Validation Error": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Notification": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ec60920f-fa90-4ddc-8d50-6146994892b3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2519c937b3787022d8151e0c251739b931165c6ff4f132821d32593bdb4c62da"
+  },
+  "nodeGroups": [],
+  "id": "hsU95ziNphl1hDrs",
+  "tags": []
+}
